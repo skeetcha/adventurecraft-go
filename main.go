@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"regexp"
 	"strconv"
+
+	"github.com/TwiN/go-color"
 )
 
 var (
@@ -374,20 +377,88 @@ var (
 )
 
 type Room struct {
-	biome int
-	trees bool
-	items map[string]Item
-	exits struct {
-		north bool
-		south bool
-		east  bool
-		west  bool
-		down  bool
-		up    bool
-	}
+	biome    int
+	trees    bool
+	items    map[string]Item
+	exits    Exits
 	dark     bool
 	monsters int
 	valid    bool
+}
+
+type Exits struct {
+	north bool
+	south bool
+	east  bool
+	west  bool
+	down  bool
+	up    bool
+}
+
+func (e Exits) getExit(s string) bool {
+	switch s {
+	case "north":
+		return e.north
+	case "south":
+		return e.south
+	case "west":
+		return e.west
+	case "east":
+		return e.east
+	case "up":
+		return e.up
+	case "down":
+		return e.down
+	default:
+		return false
+	}
+}
+
+func (e *Exits) setExit(s string, v bool) {
+	switch s {
+	case "north":
+		e.north = v
+	case "south":
+		e.south = v
+	case "west":
+		e.west = v
+	case "east":
+		e.east = v
+	case "up":
+		e.up = v
+	case "down":
+		e.down = v
+	}
+}
+
+func (r Room) getExits() []string {
+	exits := []string{}
+
+	if r.exits.north {
+		exits = append(exits, "north")
+	}
+
+	if r.exits.south {
+		exits = append(exits, "south")
+	}
+
+	if r.exits.west {
+		exits = append(exits, "west")
+	}
+
+	if r.exits.east {
+		exits = append(exits, "east")
+	}
+
+	if r.exits.up {
+		exits = append(exits, "up")
+	}
+
+	if r.exits.down {
+		exits = append(exits, "down")
+	}
+
+	return exits
 }
 
 func getTimeOfDay() float64 {
@@ -398,7 +469,13 @@ func isSunny() bool {
 	return getTimeOfDay() < 10
 }
 
-func getRoom(x int, y int, z int, dontCreate bool) Room {
+type RoomCoord struct {
+	x int
+	y int
+	z int
+}
+
+func getRoom(x int, y int, z int, dontCreate bool) RoomCoord {
 	xVal, ok := roomMap[x]
 
 	if !ok {
@@ -464,118 +541,21 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 			room.valid = true
 		} else {
 			tryExit := func(sDir string, sOpp string, x int, y int, z int) {
-				adj := getRoom(x, y, z, true)
+				coords := getRoom(x, y, z, true)
+				adj := roomMap[coords.x][coords.y][coords.z]
 
 				if adj.valid {
-					switch sOpp {
-					case "north":
-						if adj.exits.north {
-							switch sDir {
-							case "north":
-								room.exits.north = true
-							case "south":
-								room.exits.south = true
-							case "west":
-								room.exits.west = true
-							case "east":
-								room.exits.east = true
-							case "down":
-								room.exits.down = true
-							case "up":
-								room.exits.up = true
-							}
-						}
-					case "south":
-						if adj.exits.south {
-							switch sDir {
-							case "north":
-								room.exits.north = true
-							case "south":
-								room.exits.south = true
-							case "west":
-								room.exits.west = true
-							case "east":
-								room.exits.east = true
-							case "down":
-								room.exits.down = true
-							case "up":
-								room.exits.up = true
-							}
-						}
-					case "west":
-						if adj.exits.west {
-							switch sDir {
-							case "north":
-								room.exits.north = true
-							case "south":
-								room.exits.south = true
-							case "west":
-								room.exits.west = true
-							case "east":
-								room.exits.east = true
-							case "down":
-								room.exits.down = true
-							case "up":
-								room.exits.up = true
-							}
-						}
-					case "east":
-						if adj.exits.east {
-							switch sDir {
-							case "north":
-								room.exits.north = true
-							case "south":
-								room.exits.south = true
-							case "west":
-								room.exits.west = true
-							case "east":
-								room.exits.east = true
-							case "down":
-								room.exits.down = true
-							case "up":
-								room.exits.up = true
-							}
-						}
-					case "down":
-						if adj.exits.down {
-							switch sDir {
-							case "north":
-								room.exits.north = true
-							case "south":
-								room.exits.south = true
-							case "west":
-								room.exits.west = true
-							case "east":
-								room.exits.east = true
-							case "down":
-								room.exits.down = true
-							case "up":
-								room.exits.up = true
-							}
-						}
-					}
+					room.exits.setExit(sDir, adj.exits.getExit(sOpp))
 				} else {
 					if rand.Intn(3) == 0 {
-						switch sDir {
-						case "north":
-							room.exits.north = true
-						case "south":
-							room.exits.south = true
-						case "west":
-							room.exits.west = true
-						case "east":
-							room.exits.east = true
-						case "down":
-							room.exits.down = true
-						case "up":
-							room.exits.up = true
-						}
+						room.exits.setExit(sDir, true)
 					}
 				}
 			}
 
 			if y == -1 {
-				above := getRoom(x, y+1, z, false)
+				coords := getRoom(x, y+1, z, false)
+				above := roomMap[coords.x][coords.y][coords.z]
 
 				if above.exits.down {
 					room.exits.up = true
@@ -610,12 +590,24 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 
 			room.dark = true
 		}
+
+		roomMap[x][y][z] = room
 	}
 
-	return roomMap[x][y][z]
+	return RoomCoord{x: x, y: y, z: z}
 }
 
-func itemize(t []int) string {
+func itemizeNum(t []int) string {
+	ts := []string{}
+
+	for _, v := range t {
+		ts = append(ts, strconv.Itoa(v))
+	}
+
+	return itemizeStr(ts)
+}
+
+func itemizeStr(t []string) string {
 	if len(t) == 0 {
 		return "nothing"
 	}
@@ -623,7 +615,7 @@ func itemize(t []int) string {
 	text := ""
 
 	for i := 0; i < len(t); i++ {
-		text += strconv.Itoa(t[i])
+		text += t[i]
 
 		if i < len(t)-1 {
 			if i < len(t)-2 {
@@ -641,11 +633,11 @@ var (
 	matches = map[string][]string{
 		"wait": {"wait"},
 		"look": {
-			"look at the ([%a ]+)",
-			"look at ([%a ]+)",
+			"look at the ([A-z ]+)",
+			"look at ([A-z ]+)",
 			"look",
-			"inspect ([%a ]+)",
-			"inspect the ([%a ]+)",
+			"inspect ([A-z ]+)",
+			"inspect the ([A-z ]+)",
 			"inspect",
 		},
 		"inventory": {
@@ -655,54 +647,698 @@ var (
 			"i",
 		},
 		"go": {
-			"go (%a+)",
-			"travel (%a+)",
-			"walk (%a+)",
-			"run (%a+)",
+			"go ([A-z]+)",
+			"travel ([A-z]+)",
+			"walk ([A-z]+)",
+			"run ([A-z]+)",
 			"go",
 		},
 		"dig": {
-			"dig (%a+) using ([%a ]+)",
-			"dig (%a+) with ([%a ]+)",
-			"dig (%a+)",
+			"dig ([A-z]+) using ([A-z ]+)",
+			"dig ([A-z]+) with ([A-z ]+)",
+			"dig ([A-z]+)",
 			"dig",
 		},
 		"take": {
-			"pick up the ([%a ]+)",
-			"pick up ([%a ]+)",
-			"pickup ([%a ]+)",
-			"take the ([%a ]+)",
-			"take ([%a ]+)",
+			"pick up the ([A-z ]+)",
+			"pick up ([A-z ]+)",
+			"pickup ([A-z ]+)",
+			"take the ([A-z ]+)",
+			"take ([A-z ]+)",
 			"take",
 		},
 		"drop": {
-			"put down the ([%a ]+)",
-			"put down ([%a ]+)",
-			"drop the ([%a ]+)",
-			"drop ([%a ]+)",
+			"put down the ([A-z ]+)",
+			"put down ([A-z ]+)",
+			"drop the ([A-z ]+)",
+			"drop ([A-z ]+)",
 			"drop",
 		},
 		"place": {
-			"place the ([%a ]+)",
-			"place ([%a ]+)",
+			"place the ([A-z ]+)",
+			"place ([A-z ]+)",
 			"place",
 		},
 		"cbreak": {
-			"punch the ([%a ]+)",
-			"punch ([%a ]+)",
+			"punch the ([A-z ]+)",
+			"punch ([A-z ]+)",
 			"punch",
-			"break the ([%a ]+) with the ([%a ]+)",
-			"break ([%a ]+) with ([%a ]+)",
-			"break the ([%a ]+)",
-			"break ([%a ]+)",
+			"break the ([A-z ]+) with the ([A-z ]+)",
+			"break ([A-z ]+) with ([A-z ]+)",
+			"break the ([A-z ]+)",
+			"break ([A-z ]+)",
 			"break",
 		},
 		"mine": {
-			"mine the ([%a ]+) with the ([%a ]+)",
+			"mine the ([A-z ]+) with the ([A-z ]+)",
+			"mine ([A-z ]+) with ([A-z ]+)",
+			"mine ([A-z ]+)",
+			"mine",
+		},
+		"attack": {
+			"attack the ([A-z ]+) with the ([A-z ]+)",
+			"attack ([A-z ]+) with ([A-z ]+)",
+			"attack ([A-z ]+)",
+			"attack",
+			"kill the ([A-z ]+) with the ([A-z ]+)",
+			"kill ([A-z ]+) with ([A-z ]+)",
+			"kill ([A-z ]+)",
+			"kill",
+			"hit the ([A-z ]+) with the ([A-z ]+)",
+			"hit ([A-z ]+) with ([A-z ]+)",
+			"hit ([A-z ]+)",
+			"hit",
+		},
+		"craft": {
+			"craft a ([A-z ]+)",
+			"craft some ([A-z ]+)",
+			"craft ([A-z ]+)",
+			"craft",
+			"make a ([A-z ]+)",
+			"make some ([A-z ]+)",
+			"make ([A-z ]+)",
+			"make",
+		},
+		"build": {
+			"build ([A-z ]+) out of ([A-z ]+)",
+			"build ([A-z ]+) from ([A-z ]+)",
+			"build ([A-z ]+)",
+			"build",
+		},
+		"eat": {
+			"eat a ([A-z ]+)",
+			"eat the ([A-z ]+)",
+			"eat ([A-z ]+)",
+			"eat",
+		},
+		"help": {
+			"help me",
+			"help",
+		},
+		"exit": {
+			"exit",
+			"quit",
+			"goodbye",
+			"good bye",
+			"bye",
+			"farewell",
+		},
+	}
+
+	commands = map[string]func([]string){
+		"noinput": func(_ []string) {
+			responses := []string{
+				"Speak up.",
+				"Enunciate.",
+				"Project your voice.",
+				"Don't be shy.",
+				"Use your words.",
+			}
+
+			fmt.Println(randomChoice(responses))
+		},
+		"badinput": func(_ []string) {
+			responses := []string{
+				"I don't understand.",
+				"I don't understand you.",
+				"You can't do that.",
+				"Nope.",
+				"Huh?",
+				"Say again?",
+				"That's crazy talk.",
+				"Speak clearly.",
+				"I'll think about it.",
+				"Let me get back to you on that one.",
+				"That doens't make any sense.",
+				"What?",
+			}
+
+			fmt.Println(randomChoice(responses))
+		},
+		"wait": func(_ []string) {
+			fmt.Println("Time passes...")
+		},
+		"look": func(vals []string) {
+			var target string
+
+			if len(vals) == 0 {
+				target = ""
+			} else {
+				target = vals[0]
+			}
+
+			coords := getRoom(x, y, z, false)
+			room := roomMap[coords.x][coords.y][coords.z]
+
+			if room.dark {
+				fmt.Println("It is pitch dark.")
+				return
+			}
+
+			if target == "" {
+				if y == 0 {
+					fmt.Printf("You are standing %s. ", biomes[room.biome])
+					fmt.Println(dayCycle[int(getTimeOfDay())])
+				} else {
+					fmt.Print("You are underground. ")
+					exits := room.getExits()
+
+					if len(exits) != 0 {
+						fmt.Printf("You can travel %s.", itemizeStr(exits))
+					} else {
+						fmt.Println()
+					}
+				}
+
+				if len(room.items) > 0 {
+					items := []string{}
+
+					for i := range room.items {
+						items = append(items, i)
+					}
+
+					fmt.Printf("There is %s here.\n", itemizeStr(items))
+				}
+
+				if room.trees {
+					fmt.Println("There are trees here.")
+				}
+			} else {
+				if room.trees && (target == "tree" || target == "trees") {
+					fmt.Println("The trees look easy to break.")
+				} else if target == "self" || target == "myself" {
+					fmt.Println("Very handsome.")
+				} else {
+					item, ok := room.items[target]
+
+					if !ok {
+						item, ok = inventory[target]
+					}
+
+					if ok {
+						if item.desc == "" {
+							fmt.Printf("You see nothing special about %s.\n", target)
+						} else {
+							fmt.Println(item.desc)
+						}
+					} else {
+						fmt.Printf("You don't see any %s here.\n", target)
+					}
+				}
+			}
+		},
+		"go": func(vals []string) {
+			var dir string
+
+			if len(vals) == 0 {
+				dir = ""
+			} else {
+				dir = vals[0]
+			}
+
+			coords := getRoom(x, y, z, false)
+			room := roomMap[coords.x][coords.y][coords.z]
+
+			if dir == "" {
+				fmt.Println("Go where?")
+				return
+			}
+
+			if nGoWest != -1 {
+				if dir == "west" {
+					nGoWest += 1
+
+					if nGoWest > len(goWest) {
+						nGoWest = 0
+					}
+
+					fmt.Println(goWest[nGoWest])
+				} else {
+					if nGoWest > 0 || turn > 6 {
+						nGoWest = -1
+					}
+				}
+			}
+
+			if !room.exits.getExit(dir) {
+				fmt.Println("You can't go that way.")
+				return
+			}
+
+			if dir == "north" {
+				z += 1
+			} else if dir == "south" {
+				z -= 1
+			} else if dir == "east" {
+				x -= 1
+			} else if dir == "west" {
+				x += 1
+			} else if dir == "up" {
+				y += 1
+			} else if dir == "down" {
+				y -= 1
+			} else {
+				fmt.Println("I don't understand that direction.")
+				return
+			}
+
+			timeInRoom = 0
+			lookComm([]string{})
+		},
+		"dig": func(vals []string) {
+			var dir string
+			var tool string
+
+			if len(vals) == 0 {
+				dir = ""
+				tool = ""
+			} else if len(vals) == 1 {
+				dir = vals[0]
+				tool = ""
+			} else {
+				dir = vals[0]
+				tool = vals[1]
+			}
+
+			coords := getRoom(x, y, z, false)
+			room := roomMap[coords.x][coords.y][coords.z]
+
+			if dir == "" {
+				fmt.Println("Dig where?")
+				return
+			}
+
+			var iTool Item
+			var fTool bool
+
+			if tool != "" {
+				iTool, fTool = inventory[tool]
+
+				if !fTool {
+					fmt.Printf("You're not carrying a %s.\n", tool)
+					return
+				}
+			}
+
+			actuallyDigging := !room.exits.getExit(dir)
+
+			if actuallyDigging {
+				if !fTool || iTool.toolType != Pick {
+					fmt.Println("You need to use a pickaxe to dig through stone.")
+					return
+				}
+			}
+
+			setCoordExit := func(x int, y int, z int, exit string, val bool) {
+				tmp := getRoom(x, y, z, false)
+				tmp2 := roomMap[tmp.x][tmp.y][tmp.z]
+				tmp2.exits.setExit(exit, val)
+				roomMap[tmp.x][tmp.y][tmp.z] = tmp2
+			}
+
+			if dir == "north" {
+				room.exits.north = true
+				z += 1
+				setCoordExit(x, y, z, "south", true)
+			} else if dir == "south" {
+				room.exits.south = true
+				z -= 1
+				setCoordExit(x, y, z, "north", true)
+			} else if dir == "east" {
+				room.exits.east = true
+				x -= 1
+				setCoordExit(x, y, z, "west", true)
+			} else if dir == "west" {
+				room.exits.west = true
+				x += 1
+				setCoordExit(x, y, z, "east", true)
+			} else if dir == "up" {
+				if y == 0 {
+					fmt.Println("You can't dig that way.")
+					return
+				}
+
+				room.exits.up = true
+
+				if y == -1 {
+					room.items["an exit to the surface"] = items["an exit to the surface"]
+				}
+
+				y += 1
+				coords1 := getRoom(x, y, z, false)
+				room1 := roomMap[coords1.x][coords1.y][coords1.z]
+				room1.exits.down = true
+
+				if y == 0 {
+					room1.items["a cave entrance"] = items["a cave entrance"]
+				}
+
+				roomMap[coords1.x][coords1.y][coords1.z] = room
+			} else if dir == "down" {
+				if y <= -3 {
+					fmt.Println("You hit bedrock.")
+					return
+				}
+
+				room.exits.down = true
+
+				if y == 0 {
+					room.items["a cave entrance"] = items["a cave entrance"]
+				}
+
+				y -= 1
+
+				coords1 := getRoom(x, y, z, false)
+				room1 := roomMap[coords1.x][coords1.y][coords1.z]
+				room1.exits.up = true
+
+				if y == -1 {
+					room.items["an exit to the surface"] = items["an exit to the surface"]
+				}
+
+				roomMap[coords1.x][coords1.y][coords1.z] = room1
+			} else {
+				fmt.Println("I don't understand that direction.")
+				return
+			}
+
+			if actuallyDigging {
+				if (dir == "down" && y == -1) || (dir == "up" && y == 0) {
+					inventory["some dirt"] = items["some dirt"]
+					inventory["some stone"] = items["some stone"]
+					fmt.Printf("You dig %s using %s and collect some dirt and stone.\n", dir, tool)
+				} else {
+					inventory["some stone"] = items["some stone"]
+					fmt.Printf("You dig %s using %s and collect some stone.\n", dir, tool)
+				}
+			}
+
+			timeInRoom = 0
+			lookComm([]string{})
+			roomMap[coords.x][coords.y][coords.z] = room
+		},
+		"inventory": func(_ []string) {
+			vals := []string{}
+
+			for i := range inventory {
+				vals = append(vals, i)
+			}
+
+			fmt.Printf("You are carrying %s.\n", itemizeStr(vals))
+		},
+		"drop": func(vals []string) {
+			var item string
+
+			if len(vals) == 0 {
+				item = ""
+			} else {
+				item = vals[0]
+			}
+
+			dropComm(item)
+		},
+		"place": func(vals []string) {
+			var item string
+
+			if len(vals) == 0 {
+				item = ""
+			} else {
+				item = vals[0]
+			}
+
+			if item == "" {
+				fmt.Println("Place what?")
+				return
+			}
+
+			if item == "torch" || item == "a torch" {
+				coords := getRoom(x, y, z, false)
+				room := roomMap[coords.x][coords.y][coords.z]
+				_, sTorches := inventory["some torches"]
+				_, torch := inventory["a torch"]
+
+				if sTorches || torch {
+					delete(inventory, "a torch")
+					room.items["a torch"] = items["a torch"]
+
+					if room.dark {
+						fmt.Println("The cave lights up under the torchflame.")
+						room.dark = false
+					} else if y == 0 && !isSunny() {
+						fmt.Println("The night gets a little brighter.")
+					} else {
+						fmt.Println("Placed.")
+					}
+				} else {
+					fmt.Println("You don't have torches.")
+				}
+
+				roomMap[coords.x][coords.y][coords.z] = room
+				return
+			}
+
+			dropComm(item)
+		},
+		"take": func(vals []string) {
+			var item string
+
+			if len(vals) == 0 {
+				item = ""
+			} else {
+				item = vals[0]
+			}
+
+			if item == "" {
+				fmt.Println("Take what?")
+				return
+			}
+
+			coords := getRoom(x, y, z, false)
+			room := roomMap[coords.x][coords.y][coords.z]
+			iItem, fItem := room.items[item]
+
+			if fItem {
+				if iItem.heavy {
+					fmt.Printf("You can't carry %s.\n", item)
+				} else if iItem.ore {
+					fmt.Println("You need to mine this ore.")
+				} else {
+					if !iItem.infinite {
+						delete(room.items, item)
+					}
+
+					inventory[item] = iItem
+
+					_, sTorches := inventory["some torches"]
+					_, torch := inventory["torch"]
+
+					if sTorches && torch {
+						delete(inventory, "a torch")
+					}
+
+					if item == "a torch" && y < 0 {
+						room.dark = true
+						fmt.Println("The cave plunges into darkness.")
+					} else {
+						fmt.Println("Taken.")
+					}
+				}
+			} else {
+				fmt.Printf("You don't see a %s here.\n", item)
+			}
+
+			roomMap[coords.x][coords.y][coords.z] = room
+		},
+		"mine": func(vals []string) {
+			var item string
+			var tool string
+
+			if len(vals) == 0 {
+				item = ""
+				tool = ""
+			} else if len(vals) == 1 {
+				item = vals[0]
+				tool = ""
+			} else {
+				item = vals[0]
+				tool = vals[1]
+			}
+
+			if item == "" {
+				fmt.Println("Mine what?")
+				return
+			}
+
+			if tool == "" {
+				fmt.Printf("Mine %s with what?\n", item)
+				return
+			}
+
+			cbreakComm(item, tool)
+		},
+		"attack": func(vals []string) {
+			var item string
+			var tool string
+
+			if len(vals) == 0 {
+				item = ""
+				tool = ""
+			} else if len(vals) == 1 {
+				item = vals[0]
+				tool = ""
+			} else {
+				item = vals[0]
+				tool = vals[1]
+			}
+
+			if item == "" {
+				fmt.Println("Attack what?")
+				return
+			}
+
+			cbreakComm(item, tool)
+		},
+		"cbreak": func(vals []string) {
+			var item string
+			var tool string
+
+			if len(vals) == 0 {
+				item = ""
+				tool = ""
+			} else if len(vals) == 1 {
+				item = vals[0]
+				tool = ""
+			} else {
+				item = vals[0]
+				tool = vals[1]
+			}
+
+			cbreakComm(item, tool)
 		},
 	}
 )
 
+func doCommand(text string) {
+	if text == "" {
+		commands["noinput"]([]string{})
+		return
+	}
+
+	for command, t := range matches {
+		for _, match := range t {
+			re := regexp.MustCompile("^" + match + "$")
+			captures := re.FindStringSubmatch(text)
+
+			if len(captures) != 0 {
+				fnCommand := commands[command]
+
+				if len(captures) == 1 && captures[0] == match {
+					fnCommand([]string{})
+				} else {
+					fnCommand(captures[1:])
+				}
+
+				return
+			}
+		}
+	}
+
+	commands["badinput"]([]string{})
+}
+
+func lookComm(vals []string) {
+
+}
+
+func dropComm(item string) {
+	if item == "" {
+		fmt.Println("Drop what?")
+		return
+	}
+
+	coords := getRoom(x, y, z, false)
+	room := roomMap[coords.x][coords.y][coords.z]
+	iItem, fItem := inventory[item]
+
+	if fItem {
+		if iItem.droppable {
+			room.items[item] = iItem
+			delete(inventory, item)
+			fmt.Println("Dropped.")
+		} else {
+			fmt.Println("You can't drop that.")
+		}
+	} else {
+		fmt.Printf("You don't have a %s.\n", item)
+	}
+
+	roomMap[coords.x][coords.y][coords.z] = room
+}
+
+func cbreakComm(item string, tool string) {
+	if item == "" {
+		fmt.Println("Break what?")
+		return
+	}
+
+	var iTool Item
+	var fTool bool
+
+	if tool != "" {
+		iTool, fTool = inventory[tool]
+
+		if !fTool {
+			fmt.Printf("You're not carrying a %s.\n", tool)
+			return
+		}
+	}
+
+	coords := getRoom(x, y, z, false)
+	room := roomMap[coords.x][coords.y][coords.z]
+
+	if item == "tree" || item == "trees" || item == "a tree" {
+		fmt.Println("The tree breaks into blocks of wood, which you pick up.")
+		inventory["some wood"] = items["some wood"]
+		return
+	} else if item == "self" || item == "myself" {
+		fmt.Println(color.Ize(color.Red, "You have died."))
+		running = false
+	}
+
+	iItem, fItem := room.items[item]
+
+	if fItem {
+		if iItem.ore {
+			if !fTool {
+				fmt.Println("You need a tool to break this ore.")
+				return
+			}
+
+			if iTool.tool {
+				if iTool.toolLevel < iItem.toolLevel {
+					fmt.Printf("%s is not strong enough to break this ore.\n", tool)
+				} else if iTool.toolType != iItem.toolType {
+					fmt.Println("You need a different kind of tool to break this ore.")
+				} else {
+					fmt.Printf("The ore breaks, dropping %s, which you pick up.", item)
+					inventory[item] = items[item]
+					if !iItem.infinite {
+						delete(room.items, item)
+					}
+				}
+			} else {
+				fmt.Printf("You can't break %s with %s.\n", item, tool)
+			}
+		} else if iItem.creature {
+			//https://github.com/dan200/ComputerCraft/blob/master/src/main/resources/assets/computercraft/lua/rom/programs/fun/adventure.lua#L1007
+		}
+	}
+}
+
+func randomChoice[T any](t []T) T {
+	return t[rand.Intn(len(t))]
+}
+
 func main() {
-	fmt.Println("Hello world!")
+	fmt.Println(color.Ize(color.Red, "This is red"))
 }
