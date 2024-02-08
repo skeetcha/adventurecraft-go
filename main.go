@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strconv"
 )
 
 var (
@@ -382,6 +383,7 @@ type Room struct {
 		east  bool
 		west  bool
 		down  bool
+		up    bool
 	}
 	dark     bool
 	monsters int
@@ -409,7 +411,7 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 		yVal = make(map[int]Room)
 	}
 
-	zVal, ok := yVal[z]
+	_, ok = yVal[z]
 
 	if !ok && !dontCreate {
 		room := Room{
@@ -420,6 +422,7 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 				east  bool
 				west  bool
 				down  bool
+				up    bool
 			}{},
 			monsters: 0,
 		}
@@ -478,6 +481,8 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 								room.exits.east = true
 							case "down":
 								room.exits.down = true
+							case "up":
+								room.exits.up = true
 							}
 						}
 					case "south":
@@ -493,6 +498,8 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 								room.exits.east = true
 							case "down":
 								room.exits.down = true
+							case "up":
+								room.exits.up = true
 							}
 						}
 					case "west":
@@ -508,6 +515,8 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 								room.exits.east = true
 							case "down":
 								room.exits.down = true
+							case "up":
+								room.exits.up = true
 							}
 						}
 					case "east":
@@ -523,6 +532,8 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 								room.exits.east = true
 							case "down":
 								room.exits.down = true
+							case "up":
+								room.exits.up = true
 							}
 						}
 					case "down":
@@ -538,17 +549,160 @@ func getRoom(x int, y int, z int, dontCreate bool) Room {
 								room.exits.east = true
 							case "down":
 								room.exits.down = true
+							case "up":
+								room.exits.up = true
 							}
+						}
+					}
+				} else {
+					if rand.Intn(3) == 0 {
+						switch sDir {
+						case "north":
+							room.exits.north = true
+						case "south":
+							room.exits.south = true
+						case "west":
+							room.exits.west = true
+						case "east":
+							room.exits.east = true
+						case "down":
+							room.exits.down = true
+						case "up":
+							room.exits.up = true
 						}
 					}
 				}
 			}
+
+			if y == -1 {
+				above := getRoom(x, y+1, z, false)
+
+				if above.exits.down {
+					room.exits.up = true
+					room.items["an exit to the surface"] = items["an exit to the surface"]
+				}
+			} else {
+				tryExit("up", "down", x, y+1, z)
+			}
+
+			if y > -3 {
+				tryExit("down", "up", x, y-1, z)
+			}
+
+			tryExit("east", "west", x-1, y, z)
+			tryExit("west", "east", x+1, y, z)
+			tryExit("north", "south", x, y, z+1)
+			tryExit("south", "north", x, y, z-1)
+
+			room.items["some stone"] = items["some stone"]
+
+			if rand.Intn(3) == 0 {
+				room.items["some coal"] = items["some coal"]
+			}
+
+			if rand.Intn(8) == 0 {
+				room.items["some iron"] = items["some iron"]
+			}
+
+			if y == -3 && rand.Intn(15) == 0 {
+				room.items["some diamond"] = items["some diamond"]
+			}
+
+			room.dark = true
 		}
 	}
+
+	return roomMap[x][y][z]
 }
+
+func itemize(t []int) string {
+	if len(t) == 0 {
+		return "nothing"
+	}
+
+	text := ""
+
+	for i := 0; i < len(t); i++ {
+		text += strconv.Itoa(t[i])
+
+		if i < len(t)-1 {
+			if i < len(t)-2 {
+				text += " and "
+			} else {
+				text += ", "
+			}
+		}
+	}
+
+	return text
+}
+
+var (
+	matches = map[string][]string{
+		"wait": {"wait"},
+		"look": {
+			"look at the ([%a ]+)",
+			"look at ([%a ]+)",
+			"look",
+			"inspect ([%a ]+)",
+			"inspect the ([%a ]+)",
+			"inspect",
+		},
+		"inventory": {
+			"check self",
+			"check inventory",
+			"inventory",
+			"i",
+		},
+		"go": {
+			"go (%a+)",
+			"travel (%a+)",
+			"walk (%a+)",
+			"run (%a+)",
+			"go",
+		},
+		"dig": {
+			"dig (%a+) using ([%a ]+)",
+			"dig (%a+) with ([%a ]+)",
+			"dig (%a+)",
+			"dig",
+		},
+		"take": {
+			"pick up the ([%a ]+)",
+			"pick up ([%a ]+)",
+			"pickup ([%a ]+)",
+			"take the ([%a ]+)",
+			"take ([%a ]+)",
+			"take",
+		},
+		"drop": {
+			"put down the ([%a ]+)",
+			"put down ([%a ]+)",
+			"drop the ([%a ]+)",
+			"drop ([%a ]+)",
+			"drop",
+		},
+		"place": {
+			"place the ([%a ]+)",
+			"place ([%a ]+)",
+			"place",
+		},
+		"cbreak": {
+			"punch the ([%a ]+)",
+			"punch ([%a ]+)",
+			"punch",
+			"break the ([%a ]+) with the ([%a ]+)",
+			"break ([%a ]+) with ([%a ]+)",
+			"break the ([%a ]+)",
+			"break ([%a ]+)",
+			"break",
+		},
+		"mine": {
+			"mine the ([%a ]+) with the ([%a ]+)",
+		},
+	}
+)
 
 func main() {
 	fmt.Println("Hello world!")
 }
-
-// https://github.com/dan200/ComputerCraft/blob/master/src/main/resources/assets/computercraft/lua/rom/programs/fun/adventure.lua
